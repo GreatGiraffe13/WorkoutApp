@@ -14,7 +14,7 @@ GOAL_OPTIONS = [
 ]
 
 class WorkoutRequest(BaseModel):
-    days_per_week: Annotated[int, (3, 7)]  # Accepts int, must be between 3 and 7
+    days_per_week: Annotated[int, (1, 7)]  # Accepts int, must be between 1 and 7
     equipment: List[Literal[
         "None", "Dumbbells", "Barbells", "Resistance Bands", "Kettlebells", "Full Gym"
     ]]
@@ -178,34 +178,96 @@ def get_exercises_for_muscle(muscle, user_equipment):
     muscle_dict = EXERCISES.get(muscle, {})
     day_exercises = []
     for subgroup, eq_dict in muscle_dict.items():
-        # Gather all possible exercises for user's equipment for this subgroup
         possible = []
         for eq in user_equipment:
             possible += eq_dict.get(eq, [])
         if possible:
-            day_exercises.append(random.choice(possible))
+            exercise = random.choice(possible)
+            # Add default sets/reps/time/rest for strength exercises
+            day_exercises.append({
+                "name": exercise,
+                "sets": 3,
+                "reps": 10,
+                "rest_seconds": 60
+            })
     return day_exercises
+
+# Define splits for 'Build Muscle' goal
+MUSCLE_SPLITS = {
+    1: ["full body"],
+    2: ["upper body", "lower body"],
+    3: ["push", "pull", "legs"],
+    4: ["upper body", "lower body", "push", "pull"],
+    5: ["push", "pull", "legs", "upper body", "lower body"],
+    6: ["push", "pull", "legs", "push", "pull", "legs"],
+    7: ["push", "pull", "legs", "upper body", "lower body", "full body", "active recovery"]
+}
+
+# Map splits to muscle groups
+SPLIT_MUSCLES = {
+    "push": ["chest", "shoulders", "triceps"],
+    "pull": ["back", "biceps", "forearms"],
+    "legs": ["legs"],
+    "upper body": ["chest", "back", "shoulders", "biceps", "triceps", "forearms"],
+    "lower body": ["legs"],
+    "full body": ["chest", "back", "shoulders", "biceps", "triceps", "forearms", "legs", "core"],
+    "active recovery": []  # Could be stretching, yoga, etc.
+}
+
+# Helper for active recovery
+ACTIVE_RECOVERY = [
+    "Child's Pose",
+    "Downward Dog",
+    "Cat-Cow Stretch",
+    "Seated Forward Fold",
+    "Cobra Pose",
+    "Thread the Needle",
+    "Supine Twist",
+    "Butterfly Stretch",
+    "Pigeon Pose",
+    "Foam Rolling",
+    "Walking"
+]
 
 @app.post("/generate-workout")
 def generate_workout(req: WorkoutRequest):
-    # Example: Day 1 is back day, select exercises from each back subgroup
     workout_plan = []
-    if req.goal in ["Build Muscle", "General Fitness"]:
-        # For demo, just do 'back' for Day 1
-        for day in range(req.days_per_week):
-            exercises = get_exercises_for_muscle("back", req.equipment)
+    if req.goal == "Build Muscle":
+        splits = MUSCLE_SPLITS.get(req.days_per_week, ["full body"])
+        for day, split in enumerate(splits):
+            if split == "active recovery":
+                # Add time and rest for yoga/stretching
+                exercises = [
+                    {"name": ex, "time_seconds": 60, "rest_seconds": 15}
+                    for ex in random.sample(ACTIVE_RECOVERY, k=min(2, len(ACTIVE_RECOVERY)))
+                ]
+                workout_plan.append({
+                    "day": day + 1,
+                    "split": split.title(),
+                    "exercises": exercises
+                })
+                continue
+            muscles = SPLIT_MUSCLES[split]
+            day_exercises = []
+            for muscle in muscles:
+                day_exercises.extend(get_exercises_for_muscle(muscle, req.equipment))
             workout_plan.append({
                 "day": day + 1,
-                "muscle_group": "Back",
-                "exercises": exercises
+                "split": split.title(),
+                "exercises": day_exercises,
+                "rest_between_exercises_seconds": 90
             })
     else:
         # Placeholder for other goals
         for day in range(req.days_per_week):
             workout_plan.append({
                 "day": day + 1,
-                "muscle_group": "Full Body",
-                "exercises": ["Jumping Jacks", "Bodyweight Squats"]
+                "split": "Full Body",
+                "exercises": [
+                    {"name": "Jumping Jacks", "time_seconds": 45, "rest_seconds": 15},
+                    {"name": "Bodyweight Squats", "sets": 3, "reps": 15, "rest_seconds": 45}
+                ],
+                "rest_between_exercises_seconds": 60
             })
     plan = {
         "days": req.days_per_week,
