@@ -15,7 +15,7 @@ function App() {
   // All equipment options
   const ALL_EQUIPMENT = [
     'None',
-    'Dumbbells',
+    'Dumbbell',
     'Resistance Bands',
     'Barbells',
     'Kettlebells',
